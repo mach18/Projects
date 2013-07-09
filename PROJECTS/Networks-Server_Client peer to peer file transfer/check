@@ -1,0 +1,919 @@
+Lets see if it works#include <stdio.h>
+#include <math.h>
+#include <iostream>
+#include <stdlib.h>
+#include <cmath>
+#include <GL/glut.h>
+#include "Robot.h"
+#include "imageloader.h"
+
+using namespace std;
+
+#define PI 3.141592653589
+#define DEG2RAD(deg) (deg * PI / 180)
+
+void drawScene();
+void draw_the_world();
+void draw_moat();
+void draw_coins(int i, int j, int i_count, int j_count);
+void draw_ditch(int i, int j, int i_count, int j_count, float d, float depth);
+void draw_elevated(int i, int j, int i_count, int j_count, float d, float height);
+void draw_normal(int i, int j, int i_count, int j_count, float d, float normal);
+float change_height(int i, int j, int i_count, int j_count, float d, float height);
+float change_depth(int i, int j, int i_count, int j_count, float d, float depth);
+void draw_robot();
+void jump();
+void update(int value);
+void initRendering();
+void handleResize(int w, int h);
+void handleKeypress1(unsigned char key, int x, int y);
+void handleKeyreleased1(unsigned char key, int x, int y);
+void handleKeypress2(int key, int x, int y);
+void handleMouseclick(int button, int state, int x, int y);
+void get_mouse(int x, int y);
+void handleRobotSpeed();
+float *findRobotBlock(float move_x, float move_z);
+void handleRobotCollisions();
+
+float ball_x = 1.0f;
+float ball_y = 0.0f;
+float ball_velx = 0.01f;
+float ball_vely = 0.02f;
+float ball_rad = 0.2f;
+float box_len = 4.0f;
+float plane_x = 0.0f;
+float plane_y = 0.0f;
+float plane_z = 0.0f;
+
+float move_x = -20.0f;
+float move_y = 0.0f;
+float move_z = 20.0f;
+float theta_robot = 0.0f;
+float theta_tile = 0.0f;
+
+float theta_x = 0.0f;
+float theta_y = 0.0f;
+float theta_z = 0.0f;
+float y_pos[1024][1024];
+float x_pos[1024][1024];
+float z_pos[1024][1024];
+float coins[1024][1024];
+float red[1024][1024];
+float green[1024][1024];
+float blue[1024][1024];
+float robot_speed = 0.0;
+float y_backup;
+
+int y_counter = 0;
+int elevation = 0;
+int tower_view = 0;
+int jump_marker = 0;
+int count = 50;
+int height_count[1024][1024] = {{0}, {0}};
+int depth_count[1024][1024] = {{0}, {0}};
+int elevated_block[1024][1024] = {{0}, {0}};
+int lowly_block[1024][1024] = {{0}, {0}};
+int normal_block[1024][1024] = {{0}, {0}};
+int block_move[1024][1024] = {{0}, {0}};
+int pressed = 0;
+int backward = 1;
+int block_x = 0;
+int block_z = 0;
+int tile_x = 0;
+int tile_z = 0;
+int light_it = 0;
+
+Robot robot;
+
+GLuint loadTexture(Image* image) {
+    GLuint textureId;
+    glGenTextures(1, &textureId);
+    glBindTexture(GL_TEXTURE_2D, textureId);
+    glTexImage2D(GL_TEXTURE_2D,
+                 0,
+                 GL_RGB,
+                 image->width, image->height,
+                 0,
+                 GL_RGB,
+                 GL_UNSIGNED_BYTE,
+                 image->pixels);
+    return textureId;
+}
+GLuint _textureGrass;
+GLuint _textureWater;
+GLuint _textureWall;
+GLuint _textureRock;
+
+int main(int argc, char **argv) {
+
+    glutInit(&argc, argv);
+    glutInitDisplayMode(GLUT_DOUBLE | GLUT_RGB | GLUT_DEPTH);
+
+    int w = glutGet(GLUT_SCREEN_WIDTH);
+    int h = glutGet(GLUT_SCREEN_HEIGHT);
+    int windowWidth = w * 5 / 6;
+    int windowHeight = h * 5 / 6;
+    srand(time(NULL));
+
+    glutInitWindowSize(windowWidth, windowHeight);
+    glutInitWindowPosition((w - windowWidth) / 2, (h - windowHeight) / 2);
+
+    glutCreateWindow("Assignment 2");
+    initRendering();
+
+    glutDisplayFunc(drawScene);
+    glutIdleFunc(drawScene);
+    glutKeyboardFunc(handleKeypress1);
+    glutKeyboardUpFunc(handleKeyreleased1);
+    glutSpecialFunc(handleKeypress2);
+    glutMouseFunc(handleMouseclick);
+    glutPassiveMotionFunc(get_mouse);
+    glutReshapeFunc(handleResize);
+    glutTimerFunc(10, update, 0);
+
+    glutMainLoop();
+    return 0;
+}
+
+void drawScene() {
+    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+    glMatrixMode(GL_MODELVIEW);
+    glLoadIdentity();
+
+    GLfloat ambientColor[] = {0.2f, 0.2f, 0.2f, 1.0f};
+    glLightModelfv(GL_LIGHT_MODEL_AMBIENT, ambientColor);
+
+    GLfloat lightColor0[] = {0.5f, 0.5f, 0.5f, 1.0f};
+    GLfloat lightPos0[] = {4.0f, 0.0f, 8.0f, 1.0f};
+    glLightfv(GL_LIGHT0, GL_DIFFUSE, lightColor0);
+    glLightfv(GL_LIGHT0, GL_POSITION, lightPos0);
+
+    GLfloat lightColor1[] = {0.5f, 0.2f, 0.2f, 1.0f};
+    GLfloat lightPos1[] = {-1.0f, 0.5f, 0.5f, 0.0f};
+    glLightfv(GL_LIGHT1, GL_DIFFUSE, lightColor1);
+    glLightfv(GL_LIGHT1, GL_POSITION, lightPos1);
+
+    glPushMatrix();
+    if(tower_view == 0)
+    {
+        // First Person
+        gluLookAt(move_x - 0.1*sin(DEG2RAD(theta_robot)), move_y+0.36, move_z - 0.1*cos(DEG2RAD(theta_robot)),
+                  move_x - 0.2*sin(DEG2RAD(theta_robot)), move_y+0.36, move_z - 0.2*cos(DEG2RAD(theta_robot)),
+                  0.0f, 1.0f, 0.0f);
+    }
+    else if(tower_view == 1)
+    {
+        // Third Person
+        gluLookAt(move_x + 2*sin(DEG2RAD(theta_robot)), move_y+1, move_z + 2*cos(DEG2RAD(theta_robot)),
+                  move_x - 2*sin(DEG2RAD(theta_robot)), move_y, move_z - 2*cos(DEG2RAD(theta_robot)),
+                  0.0f, 1.0f, 0.0f);
+    }
+    else if(tower_view == 2)
+    {
+        // Helicopter Mode
+        gluLookAt(plane_x, plane_y+10, plane_z+30,
+                  plane_x, plane_y, plane_z,
+                  0.0f, 1.0f, 0.0f);
+    }
+    else if(tower_view == 3)
+    {
+        // Tile View
+        gluLookAt(x_pos[tile_x][tile_z] - 0.1*sin(DEG2RAD(theta_tile)), y_pos[tile_x][tile_z]+1, z_pos[tile_x][tile_z] - 0.1*cos(DEG2RAD(theta_tile)),
+                  x_pos[tile_x][tile_z] - 0.2*sin(DEG2RAD(theta_tile)), y_pos[tile_x][tile_z]+1, z_pos[tile_x][tile_z] - 0.2*cos(DEG2RAD(theta_tile)),
+                  0.0f, 1.0f, 0.0f);
+    }
+    else
+    {
+        // Tower view
+        gluLookAt(-29.0, 13.16, 31.5,
+                  -5.0, 0.0, 5.0,
+                  0.0f, 1.0f, 0.0f);
+    }
+    glRotatef(theta_z, 0.0f, 0.0f, 1.0f);
+    glRotatef(theta_y, 0.0f, 1.0f, 0.0f);
+    glRotatef(theta_x, 1.0f, 0.0f, 0.0f);
+    draw_the_world();
+
+    glPushMatrix();
+    glTranslatef(move_x, move_y+0.36, move_z);
+    glRotatef(theta_robot, 0.0f, 1.0f, 0.0f);
+    glScalef(0.03, 0.03, 0.03);
+    robot.DrawRobot(0.0, 0.0, 0.0);
+
+    glPopMatrix();
+    glPopMatrix();
+    glutSwapBuffers();
+
+    handleRobotSpeed();
+
+    float *move_coor;
+    move_coor = findRobotBlock(move_x, move_z);
+    block_x = move_coor[0];
+    block_z = move_coor[1];
+    handleRobotCollisions();
+    y_backup = move_y;
+    if(jump_marker == 0)
+        move_y = y_pos[block_x][block_z];
+    if(light_it == 0)
+    {
+        glDisable(GL_COLOR_MATERIAL);
+        glDisable(GL_LIGHTING);
+        glDisable(GL_LIGHT0);
+        glDisable(GL_LIGHT1);
+        glDisable(GL_NORMALIZE);
+    }
+}
+
+void draw_the_world()
+{
+
+    int i_count=0, j_count=0;
+    float d = 0.5;
+
+    for(float i=-20; i<=20; i+=2*d)
+    {
+        j_count=0;
+        for(float j=20; j>=-20; j-=2*d)
+        {
+            if(y_counter == 0)
+            {
+                elevation = (rand() % 11) - 5;
+                block_move[i_count][j_count] = rand() % 2;
+                coins[i_count][j_count] = rand() % 2;
+                if(elevation <= -4 && (i>-17 || j<17))
+                {
+                    red[i_count][j_count] = 1.0;
+                    green[i_count][j_count] = 0.0;
+                    blue[i_count][j_count] = 0.0;
+                    y_pos[i_count][j_count] = -1.0;
+                    lowly_block[i_count][j_count] = 1;
+                    depth_count[i_count][j_count] = rand() % 201;
+                }
+                else if(elevation >= 4 && (i>-17 || j<17))
+                {
+                    red[i_count][j_count] = 0.0;
+                    green[i_count][j_count] = 0.0;
+                    blue[i_count][j_count] = 1.0;
+                    if(block_move[i_count][j_count] == 1)
+                        y_pos[i_count][j_count] = 0.0;
+                    else
+                        y_pos[i_count][j_count] = 1.0;
+                    elevated_block[i_count][j_count] = 1;
+                    height_count[i_count][j_count] = rand() % 201;
+                }
+                else
+                {
+                    red[i_count][j_count] = 0.0;
+                    green[i_count][j_count] = 1.0;
+                    blue[i_count][j_count] = 0.0;
+                    y_pos[i_count][j_count] = 0.0;
+                    normal_block[i_count][j_count] = 1;
+                }
+
+                x_pos[i_count][j_count] = i;
+                z_pos[i_count][j_count] = j;
+            }
+            else if(normal_block[i_count][j_count] == 0 && block_move[i_count][j_count] == 1)
+            {
+                if(elevated_block[i_count][j_count] == 1)
+                {
+                    y_pos[i_count][j_count] = change_height(i, j, i_count, j_count, d, y_pos[i_count][j_count]);
+                }
+                if(lowly_block[i_count][j_count] == 1)
+                {
+                    y_pos[i_count][j_count] = change_depth(i, j, i_count, j_count, d, y_pos[i_count][j_count]);
+                }
+            }
+            if(lowly_block[i_count][j_count])
+            {
+                draw_ditch(i, j, i_count, j_count, d, y_pos[i_count][j_count]);
+            }
+            else if(elevated_block[i_count][j_count])
+            {
+                draw_elevated(i, j, i_count, j_count, d, y_pos[i_count][j_count]);
+            }
+            else
+            {
+                draw_normal(i, j, i_count, j_count, d, y_pos[i_count][j_count]);
+            }
+            j_count++;
+        }
+        i_count++;
+    }
+    y_counter++;
+
+    draw_moat();
+}
+
+void draw_moat()
+{
+    float d = 0.5;
+    float x[100];
+    x[0] = -22;
+    x[1] = -21;
+    x[2] = 21;
+    x[3] = 22;
+    for(int j=0; j<4; j++)
+    {
+        for(float i=-22; i<=22; i+=2*d)
+        {
+            glEnable(GL_TEXTURE_2D);
+            glBindTexture(GL_TEXTURE_2D, _textureWater);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+            glColor3f(1.0f, 1.0f, 1.0f);
+            glBegin(GL_QUADS);
+
+            glNormal3f(0.0, 1.0f, 0.0f);
+            glTexCoord2f(0.0f, 1.0f);
+            glVertex3f(x[j]-d, 0.0, i-d);
+            glTexCoord2f(0.0f, 0.0f);
+            glVertex3f(x[j]-d, 0.0, i+d);
+            glTexCoord2f(1.0f, 1.0f);
+            glVertex3f(x[j]+d, 0.0, i+d);
+            glTexCoord2f(1.0f, 0.0f);
+            glVertex3f(x[j]+d, 0.0, i-d);
+
+            glEnd();
+            glDisable(GL_TEXTURE_2D);
+        }
+
+        for(float i=-22; i<= 22; i+=2*d)
+        {
+            glEnable(GL_TEXTURE_2D);
+            glBindTexture(GL_TEXTURE_2D, _textureWater);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+            glColor3f(1.0f, 1.0f, 1.0f);
+            glBegin(GL_QUADS);
+
+            glNormal3f(0.0, 1.0f, 0.0f);
+            glTexCoord2f(0.0f, 1.0f);
+            glVertex3f(i-d, 0.0, x[j]-d);
+            glTexCoord2f(0.0f, 0.0f);
+            glVertex3f(i-d, 0.0, x[j]+d);
+            glTexCoord2f(1.0f, 1.0f);
+            glVertex3f(i+d, 0.0, x[j]+d);
+            glTexCoord2f(1.0f, 0.0f);
+            glVertex3f(i+d, 0.0, x[j]-d);
+
+            glEnd();
+            glDisable(GL_TEXTURE_2D);
+        }
+    }
+}
+
+void draw_normal(int i, int j, int i_count, int j_count, float d, float normal)
+{
+    if(i_count == block_x && j_count == block_z && light_it == 1)
+    {
+        glDisable(GL_COLOR_MATERIAL);
+        glDisable(GL_LIGHTING);
+        glDisable(GL_LIGHT0);
+        glDisable(GL_LIGHT1);
+        glDisable(GL_NORMALIZE);
+    }
+    glEnable(GL_TEXTURE_2D);
+    glBindTexture(GL_TEXTURE_2D, _textureGrass);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    glColor3f(1.0f, 1.0f, 1.0f);
+    glBegin(GL_QUADS);
+
+    glNormal3f(0.0, 1.0f, 0.0f);
+    glTexCoord2f(0.0f, 1.0f);
+    glVertex3f(i-d, normal, j-d);
+    glTexCoord2f(0.0f, 0.0f);
+    glVertex3f(i-d, normal, j+d);
+    glTexCoord2f(1.0f, 1.0f);
+    glVertex3f(i+d, normal, j+d);
+    glTexCoord2f(1.0f, 0.0f);
+    glVertex3f(i+d, normal, j-d);
+
+    glEnd();
+    glDisable(GL_TEXTURE_2D);
+    if(i_count == block_x && j_count == block_z && light_it == 1)
+    {
+        glEnable(GL_COLOR_MATERIAL);
+        glEnable(GL_LIGHTING);
+        glEnable(GL_LIGHT0);
+        glEnable(GL_LIGHT1);
+        glEnable(GL_NORMALIZE);
+    }
+}
+
+void draw_elevated(int i, int j, int i_count, int j_count, float d, float height)
+{
+    glEnable(GL_TEXTURE_2D);
+    glBindTexture(GL_TEXTURE_2D, _textureRock);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    glColor3f(1.0f, 1.0f, 1.0f);
+    glBegin(GL_QUADS);
+    glNormal3f(0.0, 1.0f, 0.0f);
+
+    //top
+    glTexCoord2f(1.0f, 0.0f);
+    glVertex3f(i-d, height, j-d);
+    glTexCoord2f(0.0f, 0.0f);
+    glVertex3f(i-d, height, j+d);
+    glTexCoord2f(1.0f, 1.0f);
+    glVertex3f(i+d, height, j+d);
+    glTexCoord2f(0.0f, 1.0f);
+    glVertex3f(i+d, height, j-d);
+
+    //bottom
+//    glTexCoord2f(1.0f, 0.0f);
+//    glVertex3f(i-d, height-1, j-d);
+//    glTexCoord2f(0.0f, 0.0f);
+//    glVertex3f(i-d, height-1, j+d);
+//    glTexCoord2f(1.0f, 1.0f);
+//    glVertex3f(i+d, height-1, j+d);
+//    glTexCoord2f(0.0f, 1.0f);
+//    glVertex3f(i+d, height-1, j-d);
+
+    //left
+    glTexCoord2f(0.0f, 1.0f);
+    glVertex3f(i-d, 0.0, j-d);
+    glTexCoord2f(0.0f, 0.0f);
+    glVertex3f(i-d, 0.0, j+d);
+    glTexCoord2f(1.0f, 0.0f);
+    glVertex3f(i-d, height, j+d);
+    glTexCoord2f(1.0f, 1.0f);
+    glVertex3f(i-d, height, j-d);
+
+    //right
+    glTexCoord2f(0.0f, 1.0f);
+    glVertex3f(i+d, 0.0, j-d);
+    glTexCoord2f(0.0f, 0.0f);
+    glVertex3f(i+d, 0.0, j+d);
+    glTexCoord2f(1.0f, 0.0f);
+    glVertex3f(i+d, height, j+d);
+    glTexCoord2f(1.0f, 1.0f);
+    glVertex3f(i+d, height, j-d);
+
+    //front
+    glTexCoord2f(0.0f, 0.0f);
+    glVertex3f(i-d, 0.0, j+d);
+    glTexCoord2f(0.0f, 1.0f);
+    glVertex3f(i-d, height, j+d);
+    glTexCoord2f(1.0f, 1.0f);
+    glVertex3f(i+d, height, j+d);
+    glTexCoord2f(1.0f, 0.0f);
+    glVertex3f(i+d, 0.0, j+d);
+
+    //back
+    glTexCoord2f(0.0f, 0.0f);
+    glVertex3f(i-d, 0.0, j-d);
+    glTexCoord2f(0.0f, 1.0f);
+    glVertex3f(i-d, height, j-d);
+    glTexCoord2f(1.0f, 1.0f);
+    glVertex3f(i+d, height, j-d);
+    glTexCoord2f(1.0f, 0.0f);
+    glVertex3f(i+d, 0.0, j-d);
+
+    glEnd();
+    glDisable(GL_TEXTURE_2D);
+}
+
+void draw_ditch(int i, int j, int i_count, int j_count, float d, float depth)
+{
+    glEnable(GL_TEXTURE_2D);
+    glBindTexture(GL_TEXTURE_2D, _textureWater);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    glColor3f(1.0f, 1.0f, 1.0f);
+    glBegin(GL_QUADS);
+    glNormal3f(0.0, 1.0f, 0.0f);
+
+    //bottom
+    glTexCoord2f(0.0f, 1.0f);
+    glVertex3f(i-d, depth, j-d);
+    glTexCoord2f(0.0f, 0.0f);
+    glVertex3f(i-d, depth, j+d);
+    glTexCoord2f(1.0f, 1.0f);
+    glVertex3f(i+d, depth, j+d);
+    glTexCoord2f(1.0f, 0.0f);
+    glVertex3f(i+d, depth, j-d);
+    glEnd();
+    glDisable(GL_TEXTURE_2D);
+
+    //left
+    glEnable(GL_TEXTURE_2D);
+    glBindTexture(GL_TEXTURE_2D, _textureWall);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    glColor3f(1.0f, 1.0f, 1.0f);
+    glBegin(GL_QUADS);
+    glTexCoord2f(1.0f, 1.0f);
+    glVertex3f(i-d, 0.0, j-d);
+    glTexCoord2f(0.0f, 1.0f);
+    glVertex3f(i-d, 0.0, j+d);
+    glTexCoord2f(0.0f, 0.0f);
+    glVertex3f(i-d, depth, j+d);
+    glTexCoord2f(1.0f, 0.0f);
+    glVertex3f(i-d, depth, j-d);
+
+    //right
+    glTexCoord2f(1.0f, 1.0f);
+    glVertex3f(i+d, 0.0, j-d);
+    glTexCoord2f(0.0f, 1.0f);
+    glVertex3f(i+d, 0.0, j+d);
+    glTexCoord2f(0.0f, 0.0f);
+    glVertex3f(i+d, depth, j+d);
+    glTexCoord2f(1.0f, 0.0f);
+    glVertex3f(i+d, depth, j-d);
+
+    //front
+    glTexCoord2f(1.0f, 0.0f);
+    glVertex3f(i-d, 0.0, j+d);
+    glTexCoord2f(0.0f, 0.0f);
+    glVertex3f(i-d, depth, j+d);
+    glTexCoord2f(0.0f, 1.0f);
+    glVertex3f(i+d, depth, j+d);
+    glTexCoord2f(1.0f, 1.0f);
+    glVertex3f(i+d, 0.0, j+d);
+
+    //back
+    glTexCoord2f(1.0f, 0.0f);
+    glVertex3f(i-d, 0.0, j-d);
+    glTexCoord2f(0.0f, 0.0f);
+    glVertex3f(i-d, depth, j-d);
+    glTexCoord2f(0.0f, 1.0f);
+    glVertex3f(i+d, depth, j-d);
+    glTexCoord2f(1.0f, 1.0f);
+    glVertex3f(i+d, 0.0, j-d);
+    glEnd();
+    glDisable(GL_TEXTURE_2D);
+}
+
+float change_height(int i, int j, int i_count, int j_count, float d, float height)
+{
+    int count = height_count[i_count][j_count];
+    if((count > 100 && count <= 200) || (height <= 0.0))
+    {
+        height += 0.01;
+    }
+    else if(count <= 100 && count > 0)
+    {
+        height -= 0.01;
+    }
+    count--;
+    if(count <= 0)
+        count = 200;
+    height_count[i_count][j_count] = count;
+    return height;
+}
+
+float change_depth(int i, int j, int i_count, int j_count, float d, float depth)
+{
+    int count = depth_count[i_count][j_count];
+    if(count > 100 && count <= 200)
+    {
+        depth += 0.01;
+    }
+    else if((count <= 100 && count > 0) || (depth <= 0.0))
+    {
+        depth -= 0.01;
+    }
+    count--;
+    if(count <= 0)
+        count = 200;
+    depth_count[i_count][j_count] = count;
+    return depth;
+}
+
+float* findRobotBlock(float move_x, float move_z)
+{
+    int x, z;
+    x = floor(abs(move_x));
+    z = floor(abs(move_z));
+
+    float x_diff, z_diff;
+    x_diff = abs(move_x) - x;
+    z_diff = abs(move_z) - z;
+
+    if(x_diff >= 0.5)
+    {
+            x++;
+    }
+    if(z_diff >= 0.5)
+    {
+            z++;
+    }
+    x = (move_x < 0 && x != 0)?-x:x;
+    z = (move_z < 0 && z != 0)?-z:z;
+    float coors[100];
+    coors[1] = -(z - 20);
+    coors[0] = x + 20;
+
+    return coors;
+}
+
+void handleRobotCollisions()
+{
+    float *future_block;
+    int temp_x, temp_z;
+    future_block = findRobotBlock(move_x - 0.08*sin(DEG2RAD(theta_robot)), move_z - 0.08*cos(DEG2RAD(theta_robot)));
+    temp_x = future_block[0];
+    temp_z = future_block[1];
+
+    temp_x = temp_x<0?0:temp_x;
+    temp_x = temp_x>40?40:temp_x;
+    temp_z = temp_z<0?0:temp_z;
+    temp_z = temp_z>40?40:temp_z;
+    if((y_pos[temp_x][temp_z] - move_y) >= 0.2 && elevated_block[temp_x][temp_z] == 1 && jump_marker == 0)
+    {
+        float incre = 0.001;
+        for(float i=0; i<20; i+=1)
+        {
+            move_z += (incre)*cos(DEG2RAD(theta_robot))*(robot_speed);
+            move_x += (incre)*sin(DEG2RAD(theta_robot))*(robot_speed);
+        }
+    }
+    else if((y_pos[temp_x][temp_z] - move_y) >= 0.0 && elevated_block[temp_x][temp_z] == 1 && jump_marker == 1)
+    {
+        move_z += (0.004)*cos(DEG2RAD(theta_robot))*(robot_speed);
+        move_x += (0.004)*sin(DEG2RAD(theta_robot))*(robot_speed);
+    }
+    else if((move_y - y_pos[temp_x][temp_z]) >= 0.2 && jump_marker == 0 && lowly_block[temp_x][temp_z] == 1)
+    {
+        printf("You died !\n");
+        exit(0);
+    }
+    else if(((move_x < -20.5 || move_x > 20.5 || move_z < -20.5 || move_z > 20.5) && move_y <= 0.0))
+    {
+        printf("You died !\n");
+        exit(0);
+    }
+    else if((y_pos[temp_x][temp_z] - move_y) >= 0.2 && jump_marker == 0 && normal_block[temp_x][temp_z] == 1)
+    {
+        move_z += (0.004)*cos(DEG2RAD(theta_robot))*(robot_speed);
+        move_x += (0.004)*sin(DEG2RAD(theta_robot))*(robot_speed);
+    }
+}
+
+void jump()
+{
+            if(count > 25)
+            {
+                move_y += 0.04*(count-25)/20;
+                count--;
+            }
+            else if(count <= 25 && count > 0)
+            {
+                move_y -= 0.04*(25-count)/20;
+                count--;
+            }
+            else
+            {
+                jump_marker = 0;
+                count = 50;
+            }
+            if(backward == 0)
+            {
+                move_x -= 0.004*sin(DEG2RAD(theta_robot))*(robot_speed/3.5);
+                move_z -= 0.004*cos(DEG2RAD(theta_robot))*(robot_speed/3.5);
+            }
+            else
+            {
+                move_x += 0.004*sin(DEG2RAD(theta_robot))*(robot_speed/3.5);
+                move_z += 0.004*cos(DEG2RAD(theta_robot))*(robot_speed/3.5);
+            }
+}
+
+void update(int value) {
+
+    if(jump_marker == 0)
+        robot.Prepare(robot_speed/500);
+    else
+        robot.Prepare(0);
+
+    if(jump_marker)
+    {
+        jump();
+    }
+
+    glutTimerFunc(10, update, 0);
+}
+
+void initRendering() {
+
+    glEnable(GL_DEPTH_TEST);
+    glEnable(GL_COLOR_MATERIAL);
+    glEnable(GL_SMOOTH);
+    glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
+    Image* image1 = loadBMP("grass2.bmp");
+    _textureGrass = loadTexture(image1);
+    delete image1;
+
+    Image* image2 = loadBMP("water2.bmp");
+    _textureWater = loadTexture(image2);
+    delete image2;
+
+    Image* image3 = loadBMP("wall.bmp");
+    _textureWall = loadTexture(image3);
+    delete image3;
+
+    Image* image4 = loadBMP("stone.bmp");
+    _textureRock = loadTexture(image4);
+    delete image4;
+}
+
+void handleResize(int w, int h) {
+
+    glViewport(0, 0, w, h);
+    glMatrixMode(GL_PROJECTION);
+    glLoadIdentity();
+    gluPerspective(45.0f, (float)w / (float)h, 0.1f, 200.0f);
+    glMatrixMode(GL_MODELVIEW);
+    glLoadIdentity();
+}
+
+void handleKeypress1(unsigned char key, int x, int y) {
+
+    if (key == 27)
+        exit(0);
+
+    if (key == 'a')
+    {
+        if(tower_view != 3)
+            theta_robot += 10;
+        else
+            theta_tile += 10;
+    }
+    if (key == 's')
+    {
+        move_z += 0.004*cos(DEG2RAD(theta_robot))*(robot_speed/2);
+        move_x += 0.004*sin(DEG2RAD(theta_robot))*(robot_speed/2);
+        pressed = 1;
+    }
+    if (key == 'w')
+    {
+        move_x -= 0.004*sin(DEG2RAD(theta_robot))*(robot_speed/2);
+        move_z -= 0.004*cos(DEG2RAD(theta_robot))*(robot_speed/2);
+        pressed = 1;
+    }
+    if (key == 'e')
+        theta_x -= 10;
+    if (key == 'd')
+    {
+        if(tower_view != 3)
+            theta_robot -= 10;
+        else
+            theta_tile -= 10;
+    }
+    if (key == 'r')
+        theta_y -= 10;
+    if (key == 'f')
+        theta_y += 10;
+    if (key == 't')
+        theta_z -= 10;
+    if (key == 'g')
+        theta_z += 10;
+
+    if (key == 'v')
+    {
+        tower_view++;
+        if(tower_view == 5)
+            tower_view = 0;
+    }
+
+    if (key == ' ')
+    {
+        jump_marker=1;
+    }
+    if (key == 'l')
+    {
+        light_it++;
+        if(light_it == 2)
+            light_it = 0;
+    }
+}
+
+void handleKeyreleased1(unsigned char key, int x, int y)
+{
+    if (key == 'w')
+    {
+        pressed = 0;
+        backward = 0;
+    }
+    if (key == 's')
+    {
+        pressed = 0;
+        backward = 1;
+    }
+}
+
+void handleRobotSpeed()
+{
+    if(pressed)
+    {
+        robot_speed += 0.5;
+    }
+    else
+    {
+        robot_speed -= 0.8;
+        if(robot_speed >= 0.0)
+        {
+            if(backward == 0)
+            {
+                move_x -= 0.004*sin(DEG2RAD(theta_robot))*(robot_speed/35);
+                move_z -= 0.004*cos(DEG2RAD(theta_robot))*(robot_speed/35);
+            }
+            else
+            {
+                move_x += 0.004*sin(DEG2RAD(theta_robot))*(robot_speed/35);
+                move_z += 0.004*cos(DEG2RAD(theta_robot))*(robot_speed/35);
+            }
+        }
+    }
+
+    if(robot_speed <= 0.0)
+    {
+        robot_speed = 0.0;
+    }
+}
+
+void handleKeypress2(int key, int x, int y) {
+
+    if (key == GLUT_KEY_LEFT)
+    {
+        if(tower_view != 3)
+            plane_x -= 0.5;
+        else
+            tile_x--;
+    }
+    if (key == GLUT_KEY_RIGHT)
+    {
+        if(tower_view != 3)
+            plane_x += 0.5;
+        else
+            tile_x++;
+    }
+    if (key == GLUT_KEY_UP)
+    {
+        if(tower_view != 3)
+            plane_z -= 0.5;
+        else
+            tile_z++;
+    }
+    if (key == GLUT_KEY_DOWN)
+    {
+        if(tower_view != 3)
+            plane_z += 0.5;
+        else
+            tile_z--;
+    }
+
+    tile_x = tile_x<0?0:tile_x;
+    tile_x = tile_x>40?40:tile_x;
+    tile_z = tile_z<0?0:tile_z;
+    tile_z = tile_z>40?40:tile_z;
+}
+
+void handleMouseclick(int button, int state, int x, int y) {
+
+    if(tower_view == 2)
+    {
+        if (state == GLUT_DOWN)
+        {
+            if (button == GLUT_LEFT_BUTTON)
+                plane_y -= 0.5;
+            else if (button == GLUT_RIGHT_BUTTON)
+                plane_y += 0.5;
+        }
+        if(button == 3)
+        {
+            plane_z -= 0.5;
+        }
+        else if(button == 4)
+        {
+            plane_z += 0.5;
+        }
+    }
+}
+
+void get_mouse(int x, int y)
+{
+    if(tower_view == 2)
+    {
+        if(x <= 100)
+        {
+            theta_y--;
+        }
+        else if(x >= 1000)
+        {
+            theta_y++;
+        }
+
+        if(y <= 100)
+        {
+            theta_x++;
+        }
+        else if(y >= 600)
+        {
+            theta_x--;
+        }
+    }
+}

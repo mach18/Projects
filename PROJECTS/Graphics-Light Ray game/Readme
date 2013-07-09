@@ -1,0 +1,34 @@
+INSTRUCTIONS
+
+_Keys_
+Speed Fast  - f
+Slow  - s
+Normal  - n
+
+_Mode_
+Static - Default
+Random  - z
+Light  - t
+Gaze Mode  - g
+
+Translate  - arrow keys
+Select Next  -  c / by mouse(click on the line of the object)
+Quit - ESC / q
+
+
+_New Element_ (1 each)
+Block - b
+Mirror - m
+Projector  - p
+
+Game
+Play Game - P  (capital p)
+Life will be displayed on top of the window
+life start=3 end=0
+new game again life=3
+	
+back to instructions - i 
+Press Enter To Start The Game after the instructions
+
+Projector has been considered as a point source of light and a line segment is drawn to select/highlight the projector.
+Insects are considered to be elliptical in shape.

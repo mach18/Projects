@@ -1,0 +1,13 @@
+Nov 15, 00:51:33 ADD: parin.porecha added student 201101345 to room no. 12.
+Nov 15, 00:51:33 STATUS: Occupancy status of room no. 12 changed to 2.
+Nov 15, 00:53:44 DELETE: parin.porecha deleted student 201101748   from room no. 12.
+Nov 15, 00:53:44 STATUS: Occupancy status of room no. 12 changed to 1.
+Nov 15, 00:53:52 ADD: parin.porecha added student 201101349 to room no. 12.
+Nov 15, 00:53:52 STATUS: Occupancy status of room no. 12 changed to 2.
+Nov 15, 00:54:02 ADD: parin.porecha added student 201101435 to room no. 12.
+Nov 15, 00:54:02 STATUS: Occupancy status of room no. 12 changed to 3.
+Nov 15, 00:55:07 DELETE: mahaver.chopra deleted student 201201047  201264209 from room no. 14.
+Nov 15, 00:55:07 STATUS: Occupancy status of room no. 14 changed to 1.
+Nov 15, 00:55:20 ADD: mahaver.chopra added student 201101745 to room no. 14.
+Nov 15, 00:55:20 STATUS: Occupancy status of room no. 14 changed to 2.
+Nov 15, 00:55:36 ADD ERROR: mahaver.chopra could not add 201104006 to room 13. Student already exists in room 17.

@@ -1,0 +1,38 @@
+This Program Includes a execute.sh file
+Executing It will run the Game Directly
+Game Contains Coins,Nos(Increases Speed),Magnets(collects Coins far away),Blocks(Moving/Stationary),Ditches
+There Are 5 Camera
+
+
+Arrow Keys
+To move the Robot
+Up -forward
+down -Brake
+Left/Right -Rotate
+Space Bar -Jump
+
+
+There Are 5 Camera Angles:
+
+cam=3(helicopter view)
+moves with Keyboard Controls
+w in the Screen
+s out of Screen
+e Above Surface
+q Out of the Surface
+a Left
+d Right
+and Mouse Drag and Rotate
+zoom in/out mouse scroll
+
+cam=5
+Tile View
+change Tile using
+t front
+g back
+f left
+h right
+r/y rotate
+
+Collecting Coins increases Points Taking Magnet Helps Collecting Far Coins Too
+Bot Dies on Falling Too Low
